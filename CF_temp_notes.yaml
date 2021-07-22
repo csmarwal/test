@@ -1,0 +1,154 @@
+#============Input Parameters ======================
+# Input parameters enable us to input custom values to our  template.
+# They are defined within the top level Parameters section.
+# Each parameter must be assigned a value at runtime.
+# The only required attribute is Type which is the data type
+# String, Number, List<number>, CommaDelimitedList, AWS-specific types(AWS::EC2::Image::Id), Systems Manager Parameter types
+Parameters:
+  NameOfService:
+    Description: "The name of the service this stack is to be used for."
+    Type: String
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access into the server
+    Type: AWS::EC2::KeyPair::KeyName
+#============Input Parameters END HERE ======================
+
+#========= Mapping for RegionMap START===============
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0ab4d1e9cf9a1215a
+    us-west-1:
+      AMI: ami-bf5540df
+    eu-west-1:
+      AMI: ami-3bfab942
+    ap-southeast-1:
+      AMI: ami-e2adf99e
+    ap-southeast-2:
+      AMI: ami-43874721
+#========= Mapping for RegionMap END===============
+
+#========= Resources Section START HERE================================================================
+Resources:
+  #========= Resources 01 Section START HERE===============
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+
+          files:
+            /var/www/html/index.php:
+              content: !Sub |
+                <?php print "Hello world Sanjay is  here!"; ?>
+            /var/www/html/sanjay.php:
+              content: !Sub |
+                <?php print "Hello world Abs was here!"; ?>
+
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+    Properties:
+      InstanceType: t2.micro
+      #========without Mappings=====================================
+      # ImageId: ami-0ab4d1e9cf9a1215a # Amazon Linux AMI in Sydney
+
+      #=======Mappings==============================================
+      # Mappings enable you to use an input value to determine another value
+      # For Example:
+      # How to determine the AMI ID based on the region? Mappings is the answer
+      ImageId:
+        Fn::FindInMap:
+          - RegionMap # Reference to RegionMap in Mapping section
+          - !Ref AWS::Region # using Ref intrinsic function to get AWS Image Region
+          - AMI
+      SecurityGroups:
+        - !Ref MySecurityGroup
+      Tags:
+        - Key: "Name"
+          Value: !Ref NameOfService
+          #==============================================================
+          # - Key: Name
+          #   Value:
+          #c     !Join [" ", [" EC2 instance for ", !Ref AWS::Region]]
+
+        #=======================Intrinsic functions=======================================
+        #  -> Built-in Functions that help you manage your stacks
+        # Reference Documentation https://d.pr/O0d2Mb
+        # ------------------Join-------
+        # Join -> Appends a set of values into a single value
+        # Syntax !join [delimiter, [comma- delimited list of values]]
+        # example !join [":" [a, b, c]]
+        #-----------
+        # FindInMap ->
+        # Ref
+        #------------
+
+        #=================PseudoParameters  =====================######
+
+        # Parameters that are predefined by CloudFormation, similar to Environment variables
+        # Reference the parameters with the Ref Intrinsic Function
+        # AWS Doc Reference Link : https://d.pr/qaw8KM
+        # AWS::AccountId , AWS::NotificationARNs, AWS::StackId, AWS::StackName, AWS::Region
+
+      KeyName: !Ref KeyName # this Intrinsic function Ref calls the "KeyName" from Parameters section on top the program
+
+      #========= User Data ===============
+
+      UserData:
+        "Fn::Base64": !Sub |
+          #! /bin/bash -xe
+          # Ensure AWS CFN Bootstrap is the latest
+          yum install -y aws-cfn-bootstrap
+          # Install the files and packages from the metadata
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource Ec2Instance  --region ${AWS::Region}
+  #========= Resources 01 Section END HERE===============
+  #========= Resources 02 Section START HERE===============
+  MySecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: 0.0.0.0/0
+  #========= Resources 02 Section END HERE===============
+#========= Resources Section END HERE===============
+
+#========= Output START HERE====================================================================================
+# Notes:
+# https://d.pr/yqtZPW this link is useful to get EC2 values (Reference Doc's)
+#
+
+Outputs:
+  ServerDns: # Logical ID
+    Value: !GetAtt
+      - Ec2Instance
+      - PublicIp
+  InstanceID:
+    Description: The Instance ID
+    Value: !GetAtt
+      - Ec2Instance
+      - PublicDnsName
+
+  Website:
+    Description: The Public DNS for the EC2 Instance
+    Value: !Sub "http://${Ec2Instance.PublicIp}"
+#================Update behaviors of stack resources==========
+# https://d.pr/nAKxRs
+
+#================AWS resource and property types reference=========
+# https://d.pr/2Z2U1Z
+
+#================Notes created by Sanjay Marwal ================
